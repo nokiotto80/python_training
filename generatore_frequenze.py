@@ -6,7 +6,7 @@ class FrequencyGeneratorApp:
     def __init__(self, master):
         self.master = master
         master.title("Generatore di Frequenza")
-        master.geometry("400x600") # Aumenta la dimensione della finestra per il nuovo slider
+        master.geometry("400x650") # Aumenta la dimensione della finestra per le etichette degli assi
 
         self.frequency = tk.DoubleVar(value=0.0) # Variabile Tkinter per la frequenza attuale
         self.amplitude_var = tk.DoubleVar(value=0.5) # Ampiezza controllata dallo slider (0.0 a 1.0)
@@ -76,6 +76,17 @@ class FrequencyGeneratorApp:
         self.phase_slider.set(0) # Imposta la fase predefinita a 0 gradi
         self.phase_slider.pack(pady=10)
 
+        # Bottone per fermare e resettare tutto
+        self.stop_button = tk.Button(
+            master,
+            text="STOP",
+            command=self.stop_and_reset,
+            width=20,
+            height=2,
+            font=("Inter", 12)
+        )
+        self.stop_button.pack(pady=5)
+
         # Menu a tendina per la selezione della forma d'onda
         waveform_options = ["Sinusoidale", "Quadra", "Triangolare", "Dente di Sega", "SINC"]
         self.waveform_menu_label = tk.Label(master, text="Seleziona Forma d'Onda:", font=("Inter", 12))
@@ -84,11 +95,26 @@ class FrequencyGeneratorApp:
         self.waveform_option_menu.config(font=("Inter", 12))
         self.waveform_option_menu.pack(pady=(0, 10))
 
-        # Canvas per disegnare la forma d'onda
+        # --- Canvas per disegnare la forma d'onda e le sue etichette degli assi ---
         self.canvas_width = 350
         self.canvas_height = 200
+        # Posiziona il canvas usando place per un controllo preciso
         self.waveform_canvas = tk.Canvas(master, width=self.canvas_width, height=self.canvas_height, bg="white", bd=2, relief="groove")
-        self.waveform_canvas.pack(pady=10)
+        # Calcolo approssimativo della posizione Y dopo gli elementi impacchettati
+        canvas_y_pos = 400
+        canvas_x_pos = 40 # Lascia spazio a sinistra per l'etichetta Y
+        self.waveform_canvas.place(x=canvas_x_pos, y=canvas_y_pos)
+
+        # Etichetta Asse Y
+        self.y_axis_label = tk.Label(master, text="Ampiezza", font=("Inter", 10), fg="gray")
+        # Posizionata a sinistra del canvas, centrata verticalmente
+        self.y_axis_label.place(x=canvas_x_pos - 35, y=canvas_y_pos + self.canvas_height / 2, anchor="center")
+
+        # Etichetta Asse X
+        self.x_axis_label = tk.Label(master, text="Tempo (s)", font=("Inter", 10), fg="gray")
+        # Posizionata sotto il canvas, centrata orizzontalmente
+        self.x_axis_label.place(x=canvas_x_pos + self.canvas_width / 2, y=canvas_y_pos + self.canvas_height + 15, anchor="center")
+        # --- Fine etichette assi ---
 
         # Variabile per gestire l'ID del ciclo di animazione
         self.animation_id = None 
@@ -189,6 +215,27 @@ class FrequencyGeneratorApp:
         increment_per_frame = (2 * np.pi * current_freq) / self.samplerate
         self.current_phase = (self.current_phase + increment_per_frame * frames) % (2 * np.pi)
 
+    def stop_and_reset(self):
+        """
+        Metodo per fermare la riproduzione, resettare gli slider e aggiornare l'interfaccia.
+        """
+
+        
+        # Resetta i valori degli slider
+        self.frequency.set(0)
+        self.amplitude_var.set(0.5)
+        self.phase_var.set(0)
+        
+        # Resetta la fase audio e di visualizzazione
+        self.current_phase = 0.0
+        self.display_phase_offset = 0.0
+
+        # Aggiorna la status label e il display del canvas
+        self.status_label.config(text=self._get_status_text())
+        self.draw_waveform()
+        print("Valori resettati e visualizzazione aggiornata.")
+
+
     def update_volume_label(self, slider_value=None):
         """
         Aggiorna l'etichetta di stato.
@@ -276,7 +323,6 @@ class FrequencyGeneratorApp:
         t = np.linspace(0, display_duration, num_points, endpoint=False)
         
         # Genera i valori y per la visualizzazione usando la funzione helper e l'offset di fase per l'animazione
-        # Non self.current_phase, ma self.display_phase_offset per l'animazione!
         y_values = self.generate_waveform_samples(selected_waveform, current_freq, t, self.display_phase_offset)
 
         y_scaled = (y_values * -1 * (self.canvas_height / 2 - 10)) + (self.canvas_height / 2)

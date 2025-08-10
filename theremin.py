@@ -8,7 +8,8 @@ class Theremin:
     def __init__(self, root):
         """
         Inizializza l'applicazione Theremin.
-        Configura la finestra principale, il canvas, lo switch per la modalità discreta
+        Configura la finestra principale, il canvas, 
+        lo switch per la modalità discreta(Questa è nuova , mai vista in giro)
         e le variabili per la generazione del suono.
         """
         self.root = root
@@ -37,6 +38,7 @@ class Theremin:
             selectcolor="#666666", # Colore quando selezionato
             indicatoron=False, # Nasconde il quadratino di default, per uno stile più moderno
             relief="raised", # Effetto 3D
+            borderwidth=3,
             padx=15, # Padding interno
             pady=8, # Padding interno
             activebackground="#555555", # Colore quando il mouse è sopra

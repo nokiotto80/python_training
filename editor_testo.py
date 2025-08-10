@@ -1,6 +1,17 @@
+"""
+Author: Macbook_Vincenzo
+Date. more or less 05/2025
+Editor di testo, Si è partiti dalle funzioni per i grassetto, corsivo, sottolineato. salvataggio su file.
+Disponibili menu dal file
+Aggiunta funzione di sintesi vocale
+
+"""
 import tkinter as tk
 from tkinter import *
 from tkinter import filedialog, font
+from gtts import gTTS
+from playsound import playsound
+import os
 
 
 
@@ -20,26 +31,52 @@ toolbar = tk.Frame(root)
 toolbar.pack(side=tk.TOP, fill=tk.X)
 
 def apply_bold():
-    if T.tag_ranges("sel"):  # Verifica se è presente una selezione
-        current_tags = T.tag_names("sel.first", "sel.last")
-        if "bold" in current_tags:
-            T.tag_remove("bold", "sel.first", "sel.last")
+    try:
+        # Ottieni l'inizio e la fine della selezione
+        start = T.index("sel.first")
+        end = T.index("sel.last")
+
+        if T.tag_ranges("bold"):
+            # Rimuovi il grassetto se è già presente nella selezione
+            T.tag_remove("bold", start, end)
         else:
-            T.tag_add("bold", "sel.first", "sel.last")
+            # Applica il grassetto
+            T.tag_add("bold", start, end)
+    except tk.TclError:
+        # Gestisce il caso in cui non c'è una selezione
+        pass
 
 def apply_italic():
-    current_tags = T.tag_names("sel.first", "sel.last")  # Corretto: solo due argomenti
-    if "italic" in current_tags:
-        T.tag_remove("italic", "sel.first", "sel.last")
-    else:
-        T.tag_add("italic", "sel.first", "sel.last")
+    try:
+        # Ottieni l'inizio e la fine della selezione
+        start = T.index("sel.first")
+        end = T.index("sel.last")
+
+        if T.tag_ranges("italic"):
+            # Rimuovi il grassetto se è già presente nella selezione
+            T.tag_remove("italic", start, end)
+        else:
+            # Applica il grassetto
+            T.tag_add("italic", start, end)
+    except tk.TclError:
+        # Gestisce il caso in cui non c'è una selezione
+        pass
 
 def apply_underline():
-    current_tags = T.tag_names("sel.first", "sel.last")  # Corretto: solo due argomenti
-    if "underline" in current_tags:
-        T.tag_remove("underline", "sel.first", "sel.last")
-    else:
-        T.tag_add("underline", "sel.first", "sel.last")
+    try:
+        # Ottieni l'inizio e la fine della selezione
+        start = T.index("sel.first")
+        end = T.index("sel.last")
+
+        if T.tag_ranges("underline"):
+            # Rimuovi il grassetto se è già presente nella selezione
+            T.tag_remove("underline", start, end)
+        else:
+            # Applica il grassetto
+            T.tag_add("underline", start, end)
+    except tk.TclError:
+        # Gestisce il caso in cui non c'è una selezione
+        pass
 
 
 # Funzioni per il menu
@@ -98,6 +135,28 @@ italic_button.pack(side=tk.LEFT)
 
 underline_button = tk.Button(toolbar, text="S", command=apply_underline)
 underline_button.pack(side=tk.LEFT)
+
+def text_to_speech():
+    """Converte il testo del widget in parlato e lo riproduce."""
+    text_to_read = T.get("1.0", tk.END)
+    if text_to_read.strip(): # Controlla che il testo non sia vuoto
+        try:
+            tts = gTTS(text=text_to_read, lang='it') # 'it' per la lingua italiana
+            tts_filename = "speech.mp3"
+            tts.save(tts_filename)
+            playsound(tts_filename)
+            os.remove(tts_filename) # Elimina il file audio temporaneo dopo la riproduzione
+        except Exception as e:
+            # Gestisce eventuali errori, ad esempio la mancanza di connessione a internet
+            print(f"Errore durante la sintesi vocale: {e}")
+            # Potresti anche mostrare un messaggio di errore all'utente con tk.messagebox
+    else:
+        print("Il campo di testo è vuoto.")
+
+# Aggiungi un pulsante alla tua toolbar
+speak_button = tk.Button(toolbar, text="🗣️ Leggi", command=text_to_speech)
+speak_button.pack(side=tk.LEFT, padx=5)
+
 
 T.pack()
 

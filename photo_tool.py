@@ -92,13 +92,13 @@ class PhotoEditorApp:
         self.warp_status_bar = tk.Label(self.master, text="Warp: OFF", bd=1, relief=tk.FLAT, anchor=tk.E, bg="lightblue", fg="darkblue", font=('Helvetica', 10, 'bold'))
         self.warp_status_bar.pack(side=tk.BOTTOM, fill=tk.X)
 
-        main_content_area = tk.Frame(self.master)
-        main_content_area.pack(side=tk.TOP, fill=tk.BOTH, expand=True)
+        self.main_content_area = tk.Frame(self.master)
+        self.main_content_area.pack(side=tk.TOP, fill=tk.BOTH, expand=True)
 
-        button_frame = tk.Frame(main_content_area)
+        button_frame = tk.Frame(self.main_content_area)
         button_frame.pack(side=tk.RIGHT, fill=tk.Y, padx=10, pady=10)
 
-        self.image_display_frame = tk.Frame(main_content_area, bg="lightgrey")
+        self.image_display_frame = tk.Frame(self.main_content_area, bg="lightgrey")
         self.image_display_frame.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=10, pady=10)
         
         self.canvas = tk.Canvas(self.image_display_frame, bg="lightgrey", highlightthickness=0)
@@ -117,6 +117,11 @@ class PhotoEditorApp:
         # Crea e impacchetta il pulsante Warp nel button_frame
         self.warp_toggle_button = tk.Button(button_frame, text="Warp: OFF", command=self.toggle_warp)
         self.warp_toggle_button.pack(pady=5, fill=tk.X)
+        
+        #un altro Frame per i bottoni sotto a tutto,per impacchettare meglio
+        # Crea un frame separato per i controlli che vuoi sotto l'immagine
+        self.bottom_controls_frame = tk.Frame(self.main_content_area)
+        self.bottom_controls_frame.pack(side=tk.BOTTOM, fill=tk.X)
 
 # A questo punto, sei ancora all'interno del button_frame.
 # Ora crea e impacchetta lo slider nello stesso button_frame, subito dopo il pulsante.
@@ -234,28 +239,43 @@ class PhotoEditorApp:
                                        command=self.on_grayscale_selection)
         self.bw_radio.pack(anchor=tk.W, padx=10)
         
-     
-    def update_warp_radius(self, new_value):
-            # 'new_value' è un valore numerico (una stringa che rappresenta un numero o un int)
-            # passato direttamente da Tkinter quando muovi lo slider.
-            # Non ha un metodo .get() o .set() perché non è una variabile di controllo.
-            
-            # Per prima cosa, converti new_value in un float se necessario per evitare errori di tipo
-  
-           try:
-               radius_value = float(new_value)
-           except (ValueError, TypeError):
-               # Gestisci il caso in cui il valore non sia un numero
-              return
+        # Aggiungi un pulsante per attivare la funzione
 
-                # A questo punto, radius_value è il numero che ti serve.
-                # Puoi stamparlo per debug e poi utilizzarlo.
-           print(f"Il raggio del Warp è ora: {radius_value}")
-    
-                # Se la tua variabile di controllo self.warp_radius è una tk.DoubleVar(),
-                # puoi aggiornarla con il nuovo valore. Questa riga è corretta.
-           self.warp_radius.set(radius_value)
+        # Aggiungi una variabile di controllo per lo slider
+        self.cartoonize_factor = tk.DoubleVar()
+        self.cartoonize_factor.set(0) # Inizializza a 0 per mostrare l'immagine originale
         
+        # Crea e impacchetta lo slider
+        self.cartoonize_slider = tk.Scale(
+            self.bottom_controls_frame,
+            from_=0,
+            to=100,
+            resolution=1,
+            orient=tk.HORIZONTAL,
+            length=200,
+            label="Fattore Cartoon",
+            command=self.update_cartoonize, # La funzione che si attiva muovendo lo slider
+            variable=self.cartoonize_factor
+        )
+        self.cartoonize_slider.pack(pady=5)
+        
+     
+    def update_warp_radius(self,val):
+
+        # 'val' è il valore numerico (str o int) passato automaticamente da Tkinter
+        
+        # Non è necessario usare self.warp_radius.get(), perché 'val' contiene già il valore.
+        # Se vuoi, puoi stamparlo per verifica.
+        print(f"Il raggio del Warp è ora: {val}")
+    
+        # Puoi usare la variabile di controllo per altri scopi, ma non è necessario
+        # aggiornarla qui perché è già aggiornata dal legame 'variable=self.warp_radius'
+        
+        # ... Inserisci qui la logica per l'effetto Warp ...
+        
+        # Questa riga era la causa dell'errore precedente e ora non serve più:
+        # self.warp_radius.set(val)
+                
     def open_image(self):
         if self.camera_active:
             self.stop_camera()
@@ -1105,6 +1125,49 @@ class PhotoEditorApp:
         # Azioni quando il mouse lascia il canvas (es. nascondere informazioni)
         pass
     
+    def update_cartoonize(self, new_value):
+        # 'new_value' è il valore dello slider, da 0 a 100
+        
+        # Per sicurezza, converti il valore in un float
+        try:
+            new_value = float(new_value)
+        except (ValueError, TypeError):
+            return
+    
+        # Se il valore è 0, mostra l'immagine originale
+        if new_value == 0:
+            # Usa il nome corretto della variabile: self.original_image_full
+            self.image = self.original_image_full.copy()
+            self.display_image()
+            return
+    
+        # Converte il valore dello slider in un fattore di controllo
+        strength = int(new_value / 10) + 1 
+        
+        # Converti l'immagine da PIL a un array NumPy in formato OpenCV (BGR)
+        # Usa il nome corretto della variabile qui
+        img_bgr = cv2.cvtColor(np.array(self.original_image_full.convert("RGB")), cv2.COLOR_RGB2BGR)
+    
+        # Passo 1: Edge-Aware Smoothing (Filtro Bilaterale)
+        img_smoothed = cv2.bilateralFilter(img_bgr, d=9, sigmaColor=strength * 10, sigmaSpace=strength * 10)
+        
+        # Passo 2: Rilevamento Bordi
+        img_gray = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2GRAY)
+        edges = cv2.adaptiveThreshold(
+            img_gray, 255, 
+            cv2.ADAPTIVE_THRESH_MEAN_C, 
+            cv2.THRESH_BINARY, 
+            blockSize=9, C=2
+        )
+        
+        # Passo 3: Combinazione
+        img_cartoonized = cv2.bitwise_and(img_smoothed, img_smoothed, mask=edges)
+        
+        # Converte l'immagine risultante in PIL e la visualizza
+        self.image = Image.fromarray(cv2.cvtColor(img_cartoonized, cv2.COLOR_BGR2RGB))
+        self.display_image()
+        
+    
     def remove_ai_background(self):
         if self.image is None:
             self.show_canvas_message("Carica un'immagine per rimuovere lo sfondo.")
@@ -1142,6 +1205,11 @@ class PhotoEditorApp:
                
             messagebox.showerror("Errore Rimozione Sfondo AI", f"Errore: {e}\nAssicurati di avere `rembg` installato correttamente.")
             self.update_status_bar("Rimozione sfondo AI fallita.")
+            
+            # richiamo funzione per CARTONIZZARE Assumi che self.original_image sia l'immagine originale (un oggetto PIL)
+# e self.display_image() sia la funzione per aggiornare il canvas
+ 
+
 
 if __name__ == "__main__":
     root = tk.Tk()

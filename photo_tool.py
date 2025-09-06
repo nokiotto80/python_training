@@ -1,6 +1,10 @@
 import tkinter as tk
 from tkinter import filedialog, messagebox
-from PIL import Image, ImageTk, ImageFilter, ExifTags
+from PIL import Image, ImageTk, ImageFilter, ExifTags,ImageDraw, ImageFont
+
+
+# import TkinterDnD2 as tkdnd
+ 
 import os
 import math
 from playsound import playsound
@@ -114,6 +118,9 @@ class PhotoEditorApp:
         self.canvas.bind('<B1-Motion>', self.on_mouse_drag)
         self.canvas.bind('<ButtonRelease-1>', self.on_mouse_up)
         
+        # Ora, rendi il canvas una zona di drop
+        # self.canvas.dnd_bind('<<Drop:DND_Files>>', self.handle_drop)
+        
         # Crea e impacchetta il pulsante Warp nel button_frame
         self.warp_toggle_button = tk.Button(button_frame, text="Warp: OFF", command=self.toggle_warp)
         self.warp_toggle_button.pack(pady=5, fill=tk.X)
@@ -138,7 +145,7 @@ class PhotoEditorApp:
              font=("Helvetica", 8)
 )
         self.warp_slider.set(50)
-        self.warp_slider.pack(pady=5, fill=tk.X) # Usa pady=5 per dare un po' di spazio
+        self.warp_slider.pack(pady=2, fill=tk.X) # Usa pady=5 per dare un po' di spazio
 
 
 
@@ -149,11 +156,20 @@ class PhotoEditorApp:
         self.take_photo_button.pack(pady=5, fill=tk.X)
 
         self.open_button = tk.Button(button_frame, text="APRI", command=self.open_image)
-        self.open_button.pack(pady=5, fill=tk.X)
-
-        self.close_button = tk.Button(button_frame, text="CHIUDI", command=self.close_image)
-        self.close_button.pack(pady=5, fill=tk.X)
         
+        self.open_close_frame = tk.Frame(button_frame)
+
+        self.open_close_frame.pack(pady=5)
+        
+        # Ora, crea e impacchetta i bottoni all'interno di questo nuovo frame
+        # Usa 'side=tk.LEFT' per posizionarli uno accanto all'altro
+        self.open_button = tk.Button(self.open_close_frame, text="APRI", command=self.open_image)
+        self.open_button.pack(side=tk.LEFT, padx=5)
+        
+        self.close_button = tk.Button(self.open_close_frame, text="CHIUDI", command=self.close_image)
+        self.close_button.pack(side=tk.LEFT, padx=5)
+              
+        self.open_button.pack(pady=5, fill=tk.X)
 
         
         
@@ -247,7 +263,7 @@ class PhotoEditorApp:
         
         # Crea e impacchetta lo slider
         self.cartoonize_slider = tk.Scale(
-            self.bottom_controls_frame,
+            alpha_button_frame,
             from_=0,
             to=100,
             resolution=1,
@@ -257,7 +273,19 @@ class PhotoEditorApp:
             command=self.update_cartoonize, # La funzione che si attiva muovendo lo slider
             variable=self.cartoonize_factor
         )
-        self.cartoonize_slider.pack(pady=5)
+        self.cartoonize_slider.pack()
+        
+        
+        self.crea_puntini_button = tk.Button(alpha_button_frame, text="Crea punti da unire", command=self.apply_dot_to_dot_Gpu)
+        self.crea_puntini_button.pack(side=tk.LEFT,pady=3)
+        
+        
+        self.blur_Face_plates_button = tk.Button(alpha_button_frame,text="Sfoca Volti/Targhe",command=self.apply_privacy_blur
+            )
+        self.blur_Face_plates_button.pack(fill=tk.X)
+        
+        
+        tk.Label(grayscale_frame, text="Modalità Colore:").pack(anchor=tk.W, padx=5, pady=2)
         
      
     def update_warp_radius(self,val):
@@ -276,16 +304,23 @@ class PhotoEditorApp:
         # Questa riga era la causa dell'errore precedente e ora non serve più:
         # self.warp_radius.set(val)
                 
-    def open_image(self):
+    def open_image(self,file_path=None):
         if self.camera_active:
             self.stop_camera()
-
-        file_path = filedialog.askopenfilename(
+        
+        if not file_path:
+    # Se nessun percorso è stato passato, apri la finestra di dialogo
+            file_path = filedialog.askopenfilename(
             filetypes=[("Image Files", "*.png *.jpg *.jpeg *.gif *.bmp *.webp"), ("All Files", "*.*")]
         )
         if file_path:
-            self.load_image(file_path)
-
+            
+            try:
+        # La tua logica esistente per caricare e processare l'immagine
+                self.load_image(file_path)
+            except Exception as e:
+                self.update_status_bar(f"Errore: {e}")
+ 
     def load_image(self, file_path):
         try:
             pil_image = Image.open(file_path)
@@ -420,7 +455,7 @@ class PhotoEditorApp:
         self.alpha_level = 1.0
         self.is_grayscale_active.set(False)
         self.gpu_accelerated_active = False 
-
+        self.final_image=None
         if self.rect_id:
             self.canvas.delete(self.rect_id)
         self.rect_id = None
@@ -1208,10 +1243,190 @@ class PhotoEditorApp:
             
             # richiamo funzione per CARTONIZZARE Assumi che self.original_image sia l'immagine originale (un oggetto PIL)
 # e self.display_image() sia la funzione per aggiornare il canvas
+
  
+    def apply_dot_to_dot_Gpu(self):
+        if self.original_image_full is None:
+            self.show_canvas_message("Carica un'immagine prima.")
+            return
+    
+        # Invia un messaggio immediato sulla barra di stato
+        self.update_status_bar("Elaborazione in corso... (GPU)")
+        self.master.update_idletasks()
+    
+        # Avvia la logica di calcolo in un thread separato
+        thread = threading.Thread(target=self._process_dots_on_gpu)
+        thread.start()
+
+    def _process_dots_on_gpu(self):
+        try:
+            # Verifica la disponibilità della GPU (MPS)
+            if torch.backends.mps.is_available():
+                device = torch.device("mps")
+                self.master.after(0, lambda: self.update_status_bar("Utilizzo GPU: SI"))
+            else:
+                device = torch.device("cpu")
+                self.master.after(0, lambda: self.update_status_bar("Utilizzo GPU: NO (CPU)"))
+    
+            # Conversione da PIL a Tensore PyTorch
+            img_pil = self.original_image_full.convert("RGB")
+            img_np = np.array(img_pil).astype(np.float32) / 255.0
+            # Aggiunge una dimensione batch e converte in C x H x W
+            img_tensor = torch.from_numpy(img_np).permute(2, 0, 1).unsqueeze(0).to(device)
+    
+            # 1. Conversione in scala di grigi sulla GPU
+            gray_tensor = 0.2989 * img_tensor[:, 0:1, :, :] + 0.5870 * img_tensor[:, 1:2, :, :] + 0.1140 * img_tensor[:, 2:3, :, :]
+            
+            # 2. Applicazione del filtro Gaussian (sfocatura)
+            gaussian_kernel = torch.tensor([
+                [1., 2., 1.],
+                [2., 4., 2.],
+                [1., 2., 1.]
+            ]).unsqueeze(0).unsqueeze(0) / 16.0
+            gaussian_kernel = gaussian_kernel.to(device)
+            
+            # Per evitare problemi con i bordi, applichiamo un padding
+            blurred_tensor = F.conv2d(gray_tensor, gaussian_kernel, padding=1)
+    
+            # 3. Rilevamento dei bordi con il filtro Sobel
+            sobel_x_kernel = torch.tensor([[-1., 0., 1.], [-2., 0., 2.], [-1., 0., 1.]]).unsqueeze(0).unsqueeze(0).to(device)
+            sobel_y_kernel = torch.tensor([[-1., -2., -1.], [0., 0., 0.], [1., 2., 1.]]).unsqueeze(0).unsqueeze(0).to(device)
+    
+            grad_x = F.conv2d(blurred_tensor, sobel_x_kernel, padding=1)
+            grad_y = F.conv2d(blurred_tensor, sobel_y_kernel, padding=1)
+            
+            # Calcolo della magnitudine del gradiente (l'intensità dei bordi)
+            edge_magnitude = torch.sqrt(grad_x**2 + grad_y**2)
+    
+            # 4. Semplice soglia per trovare i punti dei bordi (al posto di Canny)
+            # La soglia può essere regolata a seconda dell'immagine
+            threshold = 0.15
+            edges_tensor = (edge_magnitude > threshold).squeeze().cpu().detach().numpy()
+            
+            # 5. Estrazione dei punti sulla CPU
+            edge_points = np.argwhere(edges_tensor)
+            
+            if edge_points.size == 0:
+                self.master.after(0, lambda: self.update_status_bar("Nessun bordo rilevato."))
+                return
+    
+            # 6. Campionamento dei punti
+            np.random.shuffle(edge_points)
+            min_distance_sq = 40**2 
+            sampled_points = []
+            if len(edge_points) > 0:
+                sampled_points.append(edge_points[0])
+            
+            for point in edge_points:
+                is_far_enough = True
+                for sampled_point in sampled_points:
+                    dist_sq = np.sum((point - sampled_point)**2)
+                    if dist_sq < min_distance_sq:
+                        is_far_enough = False
+                        break
+                if is_far_enough:
+                    sampled_points.append(point)
+    
+            # 7. Creazione dell'immagine finale nel thread principale
+            final_image = Image.new('RGB', img_pil.size, 'white')
+            draw = ImageDraw.Draw(final_image)
+    
+            for i, (y, x) in enumerate(sampled_points):
+                draw.ellipse((x-2, y-2, x+2, y+2), fill='black')
+                draw.text((x + 5, y - 5), str(i + 1), fill='black')
+            
+            self.final_image = final_image
+            self.master.after(0, self._finish_dot_to_dot)
+        
+        except Exception as e:
+            self.master.after(0, lambda: self.update_status_bar(f"Errore:"))
+            print("eccezione nel processare i puntini con Pytorch, tensori, algoritmi di Gaussian,Sobel e tensori")
+            print(e)
+            import traceback
+            traceback.print_exc()
+
+    def _finish_dot_to_dot(self):
+        self.image = self.final_image
+        self.display_image()
+        self.update_status_bar(f"Gioco 'Unisci i Puntini' generato con successo!")
+        
+        # NON FUNZIONA  per gestire il Drag&Drop
+    def handle_drop(self, event):
+        # L'oggetto 'event' contiene i dati del file droppato
+        # event.data è una stringa che contiene i percorsi dei file
+        # Separali se sono più di uno
+        file_path = event.data.strip()
+    
+        # Le virgolette di Tkinter possono causare problemi, quindi rimuoviamole
+        if file_path.startswith('{') and file_path.endswith('}'):
+            file_path = file_path[1:-1]
+    
+        # Controlla se il percorso è valido e passalo alla funzione open_file
+        if file_path:
+            self.open_file(file_path)
+            
+     # Aggiungi questa funzione alla tua classe, ad esempio dopo il metodo open_file()
+    def apply_privacy_blur(self):
+        if self.image is None:
+            self.show_canvas_message("Carica un'immagine prima di applicare la sfocatura.")
+            return
+    
+        self.update_status_bar("Applicando la sfocatura per la privacy...")
+        self.master.update_idletasks()
+        self.face_cascade = cv2.CascadeClassifier('haarcascade_frontalface_default.xml')
+        self.plate_cascade = cv2.CascadeClassifier('haarcascade_russian_plate_number.xml')
+        
+        try:
+            # Percorsi dei classificatori Haar Cascade pre-addestrati
+            face_cascade_path = cv2.data.haarcascades + 'haarcascade_frontalface_default.xml'
+            # Per le targhe, non esiste un classificatore Haar standard in OpenCV.
+            # Dovresti scaricarne uno separato, ad esempio da GitHub
+            plate_cascade_path = cv2.data.haarcascades + 'haarcascade_russian_plate_number.xml'
+            
+            # Inizializza i classificatori.
+            face_cascade = cv2.CascadeClassifier(face_cascade_path)
+            plate_cascade = cv2.CascadeClassifier(plate_cascade_path)
+    
+            # Converti l'immagine da PIL a un array OpenCV (BGR)
+            img_np = np.array(self.image.convert("RGB"))
+            img_bgr = cv2.cvtColor(img_np, cv2.COLOR_RGB2BGR)
+    
+            # Converti l'immagine in scala di grigi per il rilevamento
+            img_gray = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2GRAY)
+    
+            # Esegui il rilevamento dei volti. I parametri possono essere ottimizzati.
+            # `scaleFactor` e `minNeighbors` controllano la precisione del rilevamento.
+            faces = face_cascade.detectMultiScale(img_gray, scaleFactor=1.02, minNeighbors=3)
+            # Esegui il rilevamento delle targhe, se hai il classificatore
+            # plates = plate_cascade.detectMultiScale(img_gray, ...)
+    
+            # Per ogni volto rilevato, applica la sfocatura
+            for (x, y, w, h) in faces:
+                # Estrai la regione del viso dall'immagine originale
+                face_region = img_bgr[y:y+h, x:x+w]
+                # Applica una sfocatura gaussiana a quella regione
+                blurred_face = cv2.GaussianBlur(face_region, (99, 99), 0)
+                # Sostituisci la regione originale con quella sfocata
+                img_bgr[y:y+h, x:x+w] = blurred_face
+    
+            # Converti l'immagine BGR di nuovo in RGB per PIL
+            final_img_rgb = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2RGB)
+            
+            # Aggiorna il tuo canvas
+            self.image = Image.fromarray(final_img_rgb)
+            self.display_image()
+    
+            self.update_status_bar("Sfocatura per la privacy applicata con successo!")
+    
+        except Exception as e:
+            self.update_status_bar(f"Errore nell'applicazione della sfocatura: {e}")
+            import traceback
+            traceback.print_exc()
+                
 
 
 if __name__ == "__main__":
+   # La finestra principale deve essere un'istanza di tk.Tk()
     root = tk.Tk()
     app = PhotoEditorApp(root)
     root.mainloop()
